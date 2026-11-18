@@ -1,0 +1,48 @@
+name: Update Aozora catalog
+
+on:
+  schedule:
+    - cron: "17 19 * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ["scripts/**", ".github/workflows/update-catalog.yml"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run tests
+        run: python tests/test_build.py
+      - name: Fetch previous meta
+        run: |
+          curl -sfL "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/meta.json" \
+            -o previous-meta.json || echo "previous meta not found (first run?)"
+      - name: Build catalog
+        run: python scripts/build_catalog.py --out public --previous-meta previous-meta.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
